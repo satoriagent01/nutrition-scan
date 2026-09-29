@@ -15,7 +15,7 @@ export function createProduct(name, nutritionPer100g, ingredients, unit = "g") {
     id: crypto.randomUUID(),
     name,
     nutrients: { ...nutritionPer100g },
-    ingredients: ingredients || "",
+    ingredients: ingredients ?? "",
     unit,
   };
 }
