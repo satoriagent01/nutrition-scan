@@ -1,0 +1,9 @@
+{
+  "name": "nutrition-scan",
+  "version": "1.0.0",
+  "description": "Free, ad-free nutrition tracker with OCR",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
