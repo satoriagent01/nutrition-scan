@@ -1,154 +1,171 @@
-# Nutrition Scan - Product Specification
+# Nutrition Scan - Specification
 
-## 1. Overview
-Nutrition Scan is a free, ad-free web application that allows users to photograph food labels (nutrition tables and ingredients lists) to extract nutritional information. Users can then create custom meals by specifying the grams of each product and track their daily intake of any nutrient (calories, sodium, saturated fats, sugars, etc.).
+## Overview
+A free, ad-free nutrition tracker. Users take photos of food labels (chocolate bar, juice bottle, olive oil spray, etc.). The app uses OCR + AI to extract nutritional info (calories, fats, sugars, sodium, etc.) and ingredients. Users can create custom meals by specifying grams of each product, and track their daily intake of any nutrient (calories, sodium, saturated fats, etc.).
 
-## 2. Stack
-- **Runtime:** Node 24
-- **Frontend:** HTML, CSS, ES Modules (no framework, no build step)
-- **Backend:** Node 24 (Express or similar)
-- **OCR/AI:** OpenAI-compatible endpoint (configurable by user)
+## Data Model
 
-## 3. Data Model
+### Product
+A product represents a food item with its nutritional information per 100g (or per unit, e.g., ml).
 
-### 3.1 Product
-A food product with its nutritional information standardized per 100g.
 - `id`: string (unique identifier)
-- `name`: string (e.g., "Hazelnut Chocolate Bar")
-- `nutrients`: object (nutrient name -> value in grams or kcal per 100g)
-  - Example: `{ "energy_kj": 2292, "energy_kcal": 549, "fat": 33, "saturated_fat": 13, "carbohydrates": 55, "sugars": 45, "fiber": 2.4, "protein": 6.8, "sodium": 0.18 }`
-- `ingredients`: string (raw ingredients list)
+- `name`: string (e.g., "Dark Chocolate Bar")
+- `nutrients`: object containing nutritional values per 100g (or per unit):
+  - `energy_kj`: number (kilojoules)
+  - `energy_kcal`: number (kilocalories)
+  - `fat`: number (grams)
+  - `saturatedFat`: number (grams)
+  - `carbohydrates`: number (grams)
+  - `sugars`: number (grams)
+  - `fiber`: number (grams)
+  - `protein`: number (grams)
+  - `salt`: number (grams)
+- `ingredients`: string[] (array of ingredient strings)
+- `unit`: string (e.g., "g" or "ml")
 
-### 3.2 Meal
-A collection of products with specified quantities.
+### Meal
+A meal is a collection of products with specified quantities.
+
 - `id`: string (unique identifier)
-- `name`: string (e.g., "Lunch Plate")
-- `items`: array of `{ productId: string, grams: number }`
+- `name`: string (e.g., "Morning Snack")
+- `products`: array of objects, each containing:
+  - `productId`: string (reference to a Product)
+  - `grams`: number (amount in grams or ml)
+- `nutrients`: object with pre-calculated total nutrients for the meal (same structure as Product.nutrients), computed from the products and their gram amounts.
 
-### 3.3 DailyLog
-A log of meals consumed on a specific date.
-- `date`: string (YYYY-MM-DD)
-- `meals`: array of `{ mealId: string, timestamp: string }`
+### DailyLog
+A daily log tracks all meals consumed on a given day.
 
-## 4. OCR Extraction Interface
+- `date`: string (ISO date format, e.g., "2024-01-15")
+- `meals`: array of full Meal objects (not just IDs), each with a `nutrients` field pre-calculated.
+- `nutrients`: object with aggregated total nutrients for the day (same structure as Product.nutrients), computed from all meals in the log.
 
-### 4.1 Configuration
-The user configures their OpenAI-compatible endpoint in the UI:
-- `endpoint`: string (URL)
-- `apiKey`: string
-- `model`: string (e.g., "gpt-4o")
+## OCR Extraction Interface
 
-### 4.2 OCR Function
-- `extractNutrition(imageBase64: string, config: { endpoint: string, apiKey: string, model: string }): Promise<Product>`
-  - Takes a base64-encoded image of a nutrition label.
-  - Returns a `Product` object with nutrients per 100g.
-  - For testing, this function is mocked to return deterministic results based on the image hash or a predefined set of test images.
+The OCR module extracts nutritional information from a product label image using an OpenAI-compatible endpoint. This module is mocked for testing purposes.
 
-## 5. Meal Planning Logic
+### Function
+```typescript
+extractNutrition(imageData: ArrayBuffer, options?: { apiUrl?: string, apiKey?: string, model?: string }): Promise<NutritionData>
+```
 
-### 5.1 Calculate Meal Nutrients
-- `calculateMealNutrients(meal: Meal, products: Product[]): object`
-  - Takes a `Meal` and a map of `Product` by ID.
-  - Returns an object with total nutrients for the meal, scaled by grams.
-  - Example: If a product has 33g fat per 100g and the meal has 50g of it, the meal contributes 16.5g fat.
+### Parameters
+- `imageData`: ArrayBuffer containing the image data of the food label.
+- `options` (optional):
+  - `apiUrl`: string (URL of the OpenAI-compatible API endpoint)
+  - `apiKey`: string (API key for authentication)
+  - `model`: string (model name to use for extraction)
 
-### 5.2 Calculate Daily Intake
-- `calculateDailyIntake(log: DailyLog, products: Product[]): object`
-  - Takes a `DailyLog` and a map of `Product` by ID.
-  - Returns an object with total nutrients for the day.
+### Returns
+A `Promise<NutritionData>` where `NutritionData` is:
+```typescript
+{
+  name: string;
+  energy_kj: number;
+  energy_kcal: number;
+  fat: number;
+  saturatedFat: number;
+  carbohydrates: number;
+  sugars: number;
+  fiber: number;
+  protein: number;
+  salt: number;
+  unit: string;
+}
+```
 
-## 6. User Interface
+### Example
+Input: An ArrayBuffer containing an image of a chocolate bar label.
+Output:
+```json
+{
+  "name": "Dark Chocolate Bar",
+  "energy_kj": 2100,
+  "energy_kcal": 500,
+  "fat": 30,
+  "saturatedFat": 18,
+  "carbohydrates": 45,
+  "sugars": 35,
+  "fiber": 5,
+  "protein": 8,
+  "salt": 0.3,
+  "unit": "g"
+}
+```
 
-### 6.1 Screens
-1. **Home/Scan Screen:**
-   - User takes or uploads a photo of a nutrition label.
-   - Displays the extracted product information.
-   - Option to save the product to their library.
-2. **Product Library:**
-   - List of saved products.
-   - Search/filter products.
-3. **Meal Creator:**
-   - User selects products from their library.
-   - Specifies grams for each product.
-   - Displays calculated nutrients for the meal.
-   - Option to save the meal.
-4. **Daily Log:**
-   - Shows meals added to the current day.
-   - Displays total daily intake.
-   - Option to add more meals.
-5. **Settings:**
-   - Configure OCR endpoint, API key, and model.
+## Modules and Their Exports
 
-### 6.2 User Actions
-- **Take/Upload Photo:** Triggers OCR extraction.
-- **Save Product:** Adds the extracted product to the library.
-- **Add to Meal:** Selects a product and specifies grams for a meal.
-- **Save Meal:** Saves the meal to the library.
-- **Log Meal:** Adds a meal to the current day's log.
-- **Configure OCR:** Updates the OCR settings.
+### ocrModule
+- `extractNutrition(imageData: ArrayBuffer, options?: { apiUrl?: string, apiKey?: string, model?: string }): Promise<NutritionData>` – calls the configured OpenAI-compatible endpoint to extract nutritional info from a product label image; returns parsed nutrition data including name and unit.
 
-## 7. Acceptance Criteria
+### productModule
+- `createProduct(name: string, nutrients: NutrientData, ingredients: string[], unit: string): Product` – creates a product record with nutritional info per 100g (or per unit); returns the product object.
+- `calculateNutrientsForGrams(nutrients: NutrientData, grams: number): NutrientData` – calculates nutrient values for a given number of grams based on per-100g values; pure function.
 
-### AC-1: OCR Extraction
-- Given a photo of a nutrition label, the app extracts the nutritional information per 100g.
-- Example: For the chocolate bar image, the app extracts energy (2292 kJ / 549 kcal), fat (33g), saturated fat (13g), carbohydrates (55g), sugars (45g), fiber (2.4g), protein (6.8g), sodium (0.18g).
+### mealModule
+- `createMeal(name: string, products: Array<{productId: string, grams: number}>): Meal` – creates a meal with products and their gram amounts, pre-calculating the total nutrients; returns the meal object.
 
-### AC-2: Product Saving
-- The user can save the extracted product to their library.
-- The product is stored with its name, nutrients, and ingredients.
+### logModule
+- `addMealToLog(log: DailyLog, meal: Meal): DailyLog` – adds a meal to a daily log, aggregating nutrients; returns the updated log.
+- `createDailyLog(date: string): DailyLog` – creates a new daily log for a given date; returns the log object.
 
-### AC-3: Meal Creation
-- The user can create a meal by selecting products and specifying grams.
-- The app calculates the total nutrients for the meal based on the grams specified.
-- Example: If the user adds 50g of the chocolate bar (33g fat per 100g), the meal contributes 16.5g fat.
+### trackerModule
+- `getDailyNutrientTotal(log: DailyLog, nutrient: string): number` – returns the total of a specific nutrient from a daily log; pure function.
+- `getMealNutrientTotal(meal: Meal, nutrient: string): number` – returns the total of a specific nutrient from a meal; pure function.
 
-### AC-4: Daily Tracking
-- The user can log meals to their daily intake.
-- The app displays the total daily intake of all nutrients.
-- Example: If the user logs two meals, the daily intake is the sum of the nutrients from both meals.
+## User Interface
 
-### AC-5: Custom Nutrient Tracking
-- The user can track any nutrient they want (e.g., calories, sodium, saturated fats).
-- The app displays the total intake for each nutrient.
+### 1. Scan Screen
+- **User actions**: User takes or imports a photo of a nutrition label.
+- **Logic called**: `ocrModule.extractNutrition(imageData, options)`
+- **Flow**: The app calls the OCR module to extract nutritional information. The user reviews the extracted data (name, nutrients, ingredients, unit) and confirms or edits it. Upon confirmation, the product is saved.
 
-### AC-6: OCR Configuration
-- The user can configure their OCR endpoint, API key, and model.
-- The app uses these settings for OCR extraction.
+### 2. Product List Screen
+- **User actions**: User views all saved products. Taps a product to see its details (nutrients per 100g/unit, ingredients).
+- **Logic called**: Reads from the product storage (mocked for testing).
 
-### AC-7: Free and Ad-Free
-- The app is free to use and contains no advertisements.
+### 3. Meal Builder Screen
+- **User actions**: User selects one or more products and specifies the grams (or ml) for each to create a custom meal. The app displays the calculated nutrition for the meal.
+- **Logic called**: `mealModule.createMeal(name, products)` which internally uses `productModule.calculateNutrientsForGrams` to compute the meal's total nutrients.
 
-## 8. Examples from Images
+### 4. Daily Log Screen
+- **User actions**: User adds meals to today's log. The app shows aggregated nutrient totals for the day. The user can filter or view totals by any specific nutrient (e.g., calories, sodium, saturated fats).
+- **Logic called**: `logModule.addMealToLog(log, meal)` to add meals, and `trackerModule.getDailyNutrientTotal(log, nutrient)` to retrieve specific nutrient totals.
 
-### Image 1: Chocolate Bar
-- **Product Name:** Hazelnut Chocolate Bar (Dr. Schär AG/SPA)
-- **Nutrients per 100g:**
-  - Energy: 2292 kJ / 549 kcal
-  - Fat: 33g
-  - Saturated Fat: 13g
-  - Carbohydrates: 55g
-  - Sugars: 45g
-  - Fiber: 2.4g
-  - Protein: 6.8g
-  - Sodium: 0.18g
+## Acceptance Criteria
 
-### Image 2: Juice Bottle
-- **Product Name:** Versgeperst Appel-Sinaasappel- en Mangosap
-- **Nutrients per 100ml:**
-  - Energy: 199 kJ / 47 kcal
-  - Fat: 0g
-  - Carbohydrates: 11g
-  - Sugars: 10g
-  - Protein: 0.7g
-  - Sodium: 0.4g
+### AC-1: Product Creation with Nutritional Data
+A product must be created with a name, nutrients object (energy_kj, energy_kcal, fat, saturatedFat, carbohydrates, sugars, fiber, protein, salt), ingredients array, and unit. All nutrient values are numbers representing values per 100g (or per unit).
 
-### Image 3: Olive Oil Spray
-- **Product Name:** Extra Olijfolie van de Eerste Persing
-- **Nutrients per 100ml:**
-  - Energy: 3404 kJ / 828 kcal
-  - Fat: 92g
-  - Saturated Fat: 14g
-  - Carbohydrates: 0g
-  - Sugars: 0g
-  - Protein: 0g
-  - Sodium: 0g
+### AC-2: OCR Extraction
+The `extractNutrition` function must accept an image ArrayBuffer and optional API configuration, and return a NutritionData object with name, all nutrient fields, and unit. For testing, this function is mocked and does not call the actual API.
+
+### AC-3: Nutrient Calculation for Grams
+Given a nutrients object (per 100g) and a gram amount, the app must correctly calculate the nutrient values for that gram amount by scaling proportionally (e.g., 50g of a product with 10g fat per 100g yields 5g fat).
+
+### AC-4: Meal Creation with Pre-calculated Nutrients
+When a meal is created with products and their gram amounts, the meal's `nutrients` field must be pre-calculated as the sum of each product's nutrients scaled by their respective gram amounts.
+
+### AC-5: Daily Log with Full Meal Objects
+A daily log must store full meal objects (not just IDs) in its `meals` array, each with a pre-calculated `nutrients` field.
+
+### AC-6: Daily Nutrient Aggregation
+The daily log's `nutrients` field must be the sum of all meals' nutrients in the log.
+
+### AC-7: Specific Nutrient Query
+The app must be able to return the total of any specific nutrient (e.g., "energy_kcal", "fat", "sugars") from a daily log or meal.
+
+### AC-8: Nutrient Field Names
+All nutrient fields must use the exact names: `energy_kj`, `energy_kcal`, `fat`, `saturatedFat`, `carbohydrates`, `sugars`, `fiber`, `protein`, `salt`. No alternative names (e.g., `sodium`, `saturated_fat`) are used.
+
+### AC-9: Ingredients as String Array
+The `ingredients` field of a Product must be a `string[]`, not a single string.
+
+### AC-10: Unit Field
+A Product must have a `unit` field (e.g., "g" or "ml") indicating the unit of measurement for its nutrients.
+
+### AC-11: OCR Module Signature
+The `extractNutrition` function must have the signature `extractNutrition(imageData: ArrayBuffer, options?: { apiUrl?: string, apiKey?: string, model?: string }): Promise<NutritionData>`.
+
+### AC-12: Pure Functions for Calculations
+Nutrient calculation functions (`calculateNutrientsForGrams`, `getDailyNutrientTotal`, `getMealNutrientTotal`) must be pure functions that do not depend on external state, storage, or network calls.
