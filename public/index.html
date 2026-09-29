@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nutrition Scan</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>🍎 Nutrition Scan</h1>
+    <nav>
+      <button id="nav-scan" class="nav-btn active" data-screen="scan">Scan</button>
+      <button id="nav-products" class="nav-btn" data-screen="products">Products</button>
+      <button id="nav-meal" class="nav-btn" data-screen="meal">Meal Builder</button>
+      <button id="nav-log" class="nav-btn" data-screen="log">Daily Log</button>
+      <button id="nav-settings" class="nav-btn" data-screen="settings">⚙️</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- SCAN SCREEN -->
+    <section id="screen-scan" class="screen active">
+      <h2>Scan a Product</h2>
+      <p>Take a photo of a food label to extract nutrition info.</p>
+      <div id="camera-container">
+        <button id="btn-camera" class="btn primary">📷 Open Camera</button>
+        <button id="btn-upload" class="btn">📁 Upload Photo</button>
+        <input type="file" id="file-input" accept="image/*" capture="environment" hidden>
+      </div>
+      <div id="preview-container" class="hidden">
+        <img id="preview-image" alt="Preview">
+        <button id="btn-extract" class="btn primary">Extract Nutrition</button>
+        <button id="btn-cancel-preview" class="btn">Cancel</button>
+      </div>
+      <div id="extraction-result" class="hidden">
+        <h3>Extracted Data</h3>
+        <div id="extraction-details"></div>
+        <input type="text" id="product-name-input" placeholder="Product name">
+        <button id="btn-save-product" class="btn primary">Save as Product</button>
+        <button id="btn-discard" class="btn">Discard</button>
+      </div>
+      <div id="scan-history" class="hidden">
+        <h3>Recent Scans</h3>
+        <div id="scan-history-list"></div>
+      </div>
+    </section>
+
+    <!-- PRODUCTS SCREEN -->
+    <section id="screen-products" class="screen">
+      <h2>Saved Products</h2>
+      <div id="products-list"></div>
+      <div id="no-products" class="empty-state">
+        <p>No products saved yet. Scan a label to get started!</p>
+      </div>
+    </section>
+
+    <!-- MEAL BUILDER SCREEN -->
+    <section id="screen-meal" class="screen">
+      <h2>Meal Builder</h2>
+      <input type="text" id="meal-name-input" placeholder="Meal name (e.g., Breakfast)">
+      <div id="meal-products-list"></div>
+      <div id="add-product-section">
+        <select id="product-select">
+          <option value="">Select a product...</option>
+        </select>
+        <input type="number" id="grams-input" placeholder="Grams" min="0" step="1">
+        <button id="btn-add-product" class="btn">+ Add</button>
+      </div>
+      <div id="meal-nutrition-summary" class="hidden">
+        <h3>Meal Nutrition</h3>
+        <div id="meal-nutrition-details"></div>
+      </div>
+      <button id="btn-save-meal" class="btn primary">Save Meal</button>
+      <button id="btn-add-meal-to-log" class="btn">Add to Today's Log</button>
+    </section>
+
+    <!-- DAILY LOG SCREEN -->
+    <section id="screen-log" class="screen">
+      <h2>Daily Log</h2>
+      <div id="date-display"></div>
+      <div id="nutrient-totals"></div>
+      <div id="nutrient-filter">
+        <label>Filter by nutrient:</label>
+        <select id="nutrient-select">
+          <option value="energy_kj">Energy (kJ)</option>
+          <option value="energy_kcal">Energy (kcal)</option>
+          <option value="fat">Fat (g)</option>
+          <option value="saturatedFat">Saturated Fat (g)</option>
+          <option value="carbohydrates">Carbohydrates (g)</option>
+          <option value="sugars">Sugars (g)</option>
+          <option value="fiber">Fiber (g)</option>
+          <option value="protein">Protein (g)</option>
+          <option value="salt">Salt (g)</option>
+        </select>
+      </div>
+      <div id="meals-in-log"></div>
+      <div id="no-meals" class="empty-state">
+        <p>No meals added today. Build a meal to get started!</p>
+      </div>
+    </section>
+
+    <!-- SETTINGS SCREEN -->
+    <section id="screen-settings" class="screen">
+      <h2>Settings</h2>
+      <div class="setting-group">
+        <label for="api-url">AI Endpoint URL:</label>
+        <input type="url" id="api-url" placeholder="https://api.openai.com/v1">
+        <p class="hint">OpenAI-compatible endpoint for OCR extraction.</p>
+      </div>
+      <div class="setting-group">
+        <label for="api-key">API Key:</label>
+        <input type="password" id="api-key" placeholder="sk-...">
+        <p class="hint">Your API key for the AI endpoint.</p>
+      </div>
+      <div class-setting-group>
+        <label for="model-select">Model:</label>
+        <input type="text" id="model-select" placeholder="gpt-4o">
+        <p class="hint">The model to use for OCR (e.g., gpt-4o, gpt-4-turbo).</p>
+      </div>
+      <button id="btn-save-settings" class="btn primary">Save Settings</button>
+      <button id="btn-reset-settings" class="btn">Reset to Defaults</button>
+      <div class="setting-group">
+        <h3>About</h3>
+        <p>Nutrition Scan is a free, ad-free app for tracking your nutrition by scanning food labels.</p>
+        <p>Data is stored locally in your browser.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- PRODUCT DETAIL MODAL -->
+  <div id="product-modal" class="modal hidden">
+    <div class="modal-content">
+      <button id="btn-close-modal" class="modal-close">&times;</button>
+      <h3 id="modal-product-name"></h3>
+      <div id="modal-product-details"></div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
