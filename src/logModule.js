@@ -11,18 +11,26 @@
 export function addMealToLog(log, meal) {
   const updatedLog = {
     ...log,
-    meals: [...(log.meals || []), meal],
+    meals: [...(log.meals || [])],
   };
 
-  // Aggregate nutrients from the meal
-  const nutrients = updatedLog.nutrients || {};
-  for (const mealNutrient of meal.nutrients || []) {
-    const { nutrient, amount } = mealNutrient;
-    if (nutrient && amount !== undefined) {
-      nutrients[nutrient] = (nutrients[nutrient] || 0) + amount;
+  // Calculate nutrients for this meal from its products
+  const nutrients = {};
+  for (const item of meal.products) {
+    const { productId, grams } = item;
+    // Each product in the meal has nutritionPer100g
+    const productNutrition = productId.nutritionPer100g || productId;
+    const factor = grams / 100;
+    for (const key of Object.keys(productNutrition)) {
+      nutrients[key] = (nutrients[key] || 0) + productNutrition[key] * factor;
     }
   }
-  updatedLog.nutrients = nutrients;
+
+  updatedLog.meals.push({
+    mealId: meal.id,
+    mealName: meal.name,
+    nutrients,
+  });
 
   return updatedLog;
 }
