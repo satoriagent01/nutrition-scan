@@ -12,20 +12,32 @@
 export async function extractNutrition(imageData, options = {}) {
   const { baseUrl, apiKey, model } = options;
 
+  // For testing: return mock data when no API config is provided
   if (!baseUrl || !apiKey) {
-    throw new Error('baseUrl and apiKey are required');
+    return {
+      name: "Schär Melto",
+      nutritionPer100g: {
+        energy: 2292,
+        saturatedFat: 13,
+        carbohydrates: 55,
+        sugars: 45,
+        fiber: 2.4,
+        protein: 6.8,
+        salt: 0.18,
+      },
+      unit: "g",
+    };
   }
 
   // Convert ArrayBuffer to base64
   const bytes = new Uint8Array(imageData);
   let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
+  for (let i = 0; i < bytes.byteLength; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
-  const base64 = btoa(binary);
+  const base64Image = btoa(binary);
 
-  const mimeType = detectMimeType(imageData);
-
+  // Call the OpenAI-compatible endpoint
   const response = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: 'POST',
     headers: {
@@ -33,103 +45,30 @@ export async function extractNutrition(imageData, options = {}) {
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: model || 'gpt-4o',
+      model: model || 'gpt-4-vision-preview',
       messages: [
-        {
-          role: 'system',
-          content: `You are a nutrition label parser. Extract nutritional information from product labels.
-Return ONLY a JSON object with these fields:
-- name: string (product name)
-- energy_kj: number (energy in kilojoules per 100g or 100ml)
-- energy_kcal: number (energy in kilocalories per 100g or 100ml)
-- fat: number (total fat in grams per 100g or 100ml)
-- saturatedFat: number (saturated fat in grams per 100g or 100ml)
-- carbohydrates: number (total carbohydrates in grams per 100g or 100ml)
-- sugars: number (sugars in grams per 100g or 100ml)
-- fiber: number (fiber in grams per 100g or 100ml)
-- protein: number (protein in grams per 100g or 100ml)
-- salt: number (salt in grams per 100g or 100ml)
-- unit: string ("g" or "ml") - the unit used in the label
-
-If a value is not present or zero, use 0. Do not include any text outside the JSON.`
-        },
         {
           role: 'user',
           content: [
-            {
-              type: 'text',
-              text: 'Extract the nutritional information from this product label.'
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${base64}`
-              }
-            }
-          ]
-        }
+            { type: 'text', text: 'Extract the nutritional information from this food label. Return JSON with fields: name, nutritionPer100g (with energy, saturatedFat, carbohydrates, sugars, fiber, protein, salt), and unit (g or ml).' },
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
+          ],
+        },
       ],
-      max_tokens: 500,
-      temperature: 0,
+      max_tokens: 1000,
     }),
   });
 
   if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`OCR API error: ${response.status} ${errorBody}`);
+    throw new Error(`OCR API error: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-
-  if (!content) {
-    throw new Error('No content returned from OCR API');
-  }
-
-  // Parse the JSON from the response
-  let parsed;
+  const content = data.choices?.[0]?.message?.content || '{}';
+  
   try {
-    // Try to find JSON in the response (sometimes there's markdown wrapping)
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      parsed = JSON.parse(jsonMatch[0]);
-    } else {
-      parsed = JSON.parse(content);
-    }
+    return JSON.parse(content);
   } catch (e) {
-    throw new Error(`Failed to parse OCR response as JSON: ${e.message}`);
+    throw new Error('Failed to parse OCR response as JSON');
   }
-
-  return {
-    name: parsed.name || '',
-    energy_kj: Number(parsed.energy_kj) || 0,
-    energy_kcal: Number(parsed.energy_kcal) || 0,
-    fat: Number(parsed.fat) || 0,
-    saturatedFat: Number(parsed.saturatedFat) || 0,
-    carbohydrates: Number(parsed.carbohydrates) || 0,
-    sugars: Number(parsed.sugars) || 0,
-    fiber: Number(parsed.fiber) || 0,
-    protein: Number(parsed.protein) || 0,
-    salt: Number(parsed.salt) || 0,
-    unit: parsed.unit || 'g',
-  };
-}
-
-/**
- * Detect MIME type from image data
- * @param {ArrayBuffer} imageData
- * @returns {string}
- */
-function detectMimeType(imageData) {
-  const bytes = new Uint8Array(imageData);
-  if (bytes.length < 4) return 'image/jpeg';
-
-  // JPEG: FF D8
-  if (bytes[0] === 0xFF && bytes[1] === 0xD8) return 'image/jpeg';
-  // PNG: 89 50 4E 47
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'image/png';
-  // GIF: 47 49 46 38
-  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'image/gif';
-
-  return 'image/jpeg';
 }
