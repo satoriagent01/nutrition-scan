@@ -64,11 +64,17 @@ export async function extractNutrition(imageData, options = {}) {
   }
 
   const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '{}';
-  
+  const content = data.choices?.[0]?.message?.content || '';
+
+  // Try to parse JSON from the response
   try {
-    return JSON.parse(content);
-  } catch (e) {
-    throw new Error('Failed to parse OCR response as JSON');
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+  } catch {
+    // Fall through to error
   }
+
+  throw new Error('Failed to parse OCR response');
 }
