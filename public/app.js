@@ -20,6 +20,7 @@ const state = {
   currentScreen: "scan",
   scannedData: null,
   selectedProducts: [],
+  currentMeal: null,
   today: new Date().toISOString().split("T")[0],
 };
 
@@ -41,13 +42,19 @@ function saveSettings() {
 
 function showScreen(screen) {
   state.currentScreen = screen;
-  document.querySelectorAll(".screen").forEach((s) => s.classList.add("hidden"));
+
+  // Hide all screens
+  document.querySelectorAll(".screen").forEach((s) => {
+    s.classList.add("hidden");
+  });
+
+  // Show target screen
   const target = document.getElementById(`screen-${screen}`);
   if (target) target.classList.remove("hidden");
 
   // Update nav active state
-  document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active"));
-  const navBtn = document.querySelector(`[data-nav="${screen}"]`);
+  document.querySelectorAll(".nav-btn").forEach((n) => n.classList.remove("active"));
+  const navBtn = document.querySelector(`.nav-btn[data-screen="${screen}"]`);
   if (navBtn) navBtn.classList.add("active");
 
   // Refresh screen-specific content
@@ -61,30 +68,107 @@ function showScreen(screen) {
 
 function initScanScreen() {
   const fileInput = document.getElementById("file-input");
-  const takePhotoBtn = document.getElementById("take-photo-btn");
-  const captureBtn = document.getElementById("capture-btn");
-  const cancelCaptureBtn = document.getElementById("cancel-capture-btn");
-  const confirmBtn = document.getElementById("confirm-scan-btn");
-  const discardBtn = document.getElementById("discard-scan-btn");
-  const cameraPreview = document.getElementById("camera-preview");
+  const cameraBtn = document.getElementById("btn-camera");
+  const uploadBtn = document.getElementById("btn-upload");
+  const previewContainer = document.getElementById("preview-container");
+  const previewImage = document.getElementById("preview-image");
+  const extractBtn = document.getElementById("btn-extract");
+  const cancelPreviewBtn = document.getElementById("btn-cancel-preview");
+  const saveProductBtn = document.getElementById("btn-save-product");
+  const discardBtn = document.getElementById("btn-discard");
 
-  // File input change
+  // File input change (from upload or camera capture)
   fileInput.addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (file) processImageFile(file);
   });
 
-  // Camera capture
-  if (takePhotoBtn) {
-    takePhotoBtn.addEventListener("click", async () => {
+  // Upload button
+  if (uploadBtn) {
+    uploadBtn.addEventListener("click", () => {
+      fileInput.click();
+    });
+  }
+
+  // Camera button - open camera and capture
+  if (cameraBtn) {
+    cameraBtn.addEventListener("click", async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" },
         });
-        cameraPreview.srcObject = stream;
-        cameraPreview.classList.remove("hidden");
-        document.getElementById("camera-controls").classList.remove("hidden");
-        document.getElementById("file-input").classList.add("hidden");
+
+        // Create a temporary video element for preview
+        const video = document.createElement("video");
+        video.srcObject = stream;
+        video.autoplay = true;
+        video.playsInline = true;
+        video.style.width = "100%";
+        video.style.maxHeight = "300px";
+        video.style.borderRadius = "8px";
+        video.style.marginBottom = "10px";
+
+        // Replace the preview image with video for camera view
+        const previewImg = document.getElementById("preview-image");
+        previewImg.style.display = "none";
+        previewContainer.insertBefore(video, previewImg);
+
+        // Show preview container
+        previewContainer.classList.remove("hidden");
+
+        // Replace extract/cancel buttons with capture/cancel
+        const existingButtons = previewContainer.querySelectorAll(".btn");
+        existingButtons.forEach((btn) => btn.style.display = "none");
+
+        const captureBtn = document.createElement("button");
+        captureBtn.id = "btn-capture";
+        captureBtn.className = "btn primary";
+        captureBtn.textContent = "📸 Capture Photo";
+        captureBtn.addEventListener("click", () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(video, 0, 0);
+
+          // Stop camera stream
+          stream.getTracks().forEach((t) => t.stop());
+
+          // Remove video element
+          if (video.parentNode) {
+            video.parentNode.removeChild(video);
+          }
+
+          // Show captured image
+          previewImg.style.display = "block";
+          previewImg.src = canvas.toDataURL("image/jpeg");
+
+          // Show original buttons
+          existingButtons.forEach((btn) => btn.style.display = "");
+
+          // Convert canvas to blob and process
+          canvas.toBlob((blob) => {
+            if (blob) processImageFile(blob);
+          }, "image/jpeg");
+        });
+
+        const cancelCameraBtn = document.createElement("button");
+        cancelCameraBtn.id = "btn-cancel-camera";
+        cancelCameraBtn.className = "btn";
+        cancelCameraBtn.textContent = "✕ Cancel";
+        cancelCameraBtn.addEventListener("click", () => {
+          stream.getTracks().forEach((t) => t.stop());
+          if (video.parentNode) {
+            video.parentNode.removeChild(video);
+          }
+          previewImg.style.display = "block";
+          previewContainer.classList.add("hidden");
+          existingButtons.forEach((btn) => btn.style.display = "");
+        });
+
+        previewContainer.insertBefore(captureBtn, previewImg);
+        previewContainer.insertBefore(cancelCameraBtn, captureBtn);
+
       } catch (err) {
         alert("Camera access denied. Please use the file upload instead.");
         console.error("Camera error:", err);
@@ -92,38 +176,53 @@ function initScanScreen() {
     });
   }
 
-  if (captureBtn) {
-    captureBtn.addEventListener("click", () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = cameraPreview.videoWidth;
-      canvas.height = cameraPreview.videoHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(cameraPreview, 0, 0);
-      cameraPreview.srcObject.getTracks().forEach((t) => t.stop());
-      cameraPreview.classList.add("hidden");
-      document.getElementById("camera-controls").classList.add("hidden");
-      document.getElementById("file-input").classList.remove("hidden");
-
-      canvas.toBlob((blob) => {
-        if (blob) processImageFile(blob);
-      }, "image/jpeg");
+  // Cancel preview
+  if (cancelPreviewBtn) {
+    cancelPreviewBtn.addEventListener("click", () => {
+      document.getElementById("preview-container").classList.add("hidden");
+      fileInput.value = "";
     });
   }
 
-  if (cancelCaptureBtn) {
-    cancelCaptureBtn.addEventListener("click", () => {
-      cameraPreview.srcObject.getTracks().forEach((t) => t.stop());
-      cameraPreview.classList.add("hidden");
-      document.getElementById("camera-controls").classList.add("hidden");
-      document.getElementById("file-input").classList.remove("hidden");
+  // Extract nutrition
+  if (extractBtn) {
+    extractBtn.addEventListener("click", async () => {
+      const previewImg = document.getElementById("preview-image");
+      if (!previewImg || !previewImg.src || previewImg.src === "") {
+        alert("Please take or upload a photo first.");
+        return;
+      }
+
+      // Convert data URL to ArrayBuffer
+      const response = await fetch(previewImg.src);
+      const arrayBuffer = await response.arrayBuffer();
+
+      showLoading(true);
+
+      try {
+        const options = {};
+        if (state.settings.baseUrl) options.baseUrl = state.settings.baseUrl;
+        if (state.settings.apiKey) options.apiKey = state.settings.apiKey;
+        if (state.settings.model) options.model = state.settings.model;
+
+        const result = await extractNutrition(arrayBuffer, options);
+        state.scannedData = result;
+        renderScanResult(result);
+      } catch (err) {
+        alert("Failed to extract nutrition data: " + err.message);
+        console.error("OCR error:", err);
+      } finally {
+        showLoading(false);
+      }
     });
   }
 
-  // Confirm / Discard scanned data
-  if (confirmBtn) {
-    confirmBtn.addEventListener("click", () => {
+  // Save product
+  if (saveProductBtn) {
+    saveProductBtn.addEventListener("click", () => {
       if (!state.scannedData) return;
-      const name = document.getElementById("product-name-input").value.trim() || state.scannedData.name;
+      const nameInput = document.getElementById("product-name-input");
+      const name = nameInput.value.trim() || state.scannedData.name || "Unknown Product";
       const unit = state.scannedData.unit || "g";
       const ingredients = state.scannedData.ingredients || [];
 
@@ -131,15 +230,19 @@ function initScanScreen() {
       state.products.push(product);
       saveProducts();
       state.scannedData = null;
+      document.getElementById("extraction-result").classList.add("hidden");
+      document.getElementById("preview-container").classList.add("hidden");
       showScreen("products");
     });
   }
 
+  // Discard scanned data
   if (discardBtn) {
     discardBtn.addEventListener("click", () => {
       state.scannedData = null;
-      document.getElementById("scan-result").classList.add("hidden");
-      document.getElementById("scan-actions").classList.add("hidden");
+      document.getElementById("extraction-result").classList.add("hidden");
+      document.getElementById("preview-container").classList.add("hidden");
+      document.getElementById("product-name-input").value = "";
     });
   }
 }
@@ -148,6 +251,14 @@ async function processImageFile(file) {
   const reader = new FileReader();
   reader.onload = async (e) => {
     const arrayBuffer = e.target.result;
+
+    // Show preview
+    const previewImg = document.getElementById("preview-image");
+    const previewContainer = document.getElementById("preview-container");
+    const dataUrl = URL.createObjectURL(file);
+    previewImg.src = dataUrl;
+    previewContainer.classList.remove("hidden");
+
     showLoading(true);
 
     try {
@@ -170,8 +281,8 @@ async function processImageFile(file) {
 }
 
 function renderScanResult(data) {
-  const resultDiv = document.getElementById("scan-result");
-  const actionsDiv = document.getElementById("scan-actions");
+  const resultDiv = document.getElementById("extraction-result");
+  const detailsDiv = document.getElementById("extraction-details");
   const nameInput = document.getElementById("product-name-input");
 
   nameInput.value = data.name || "";
@@ -211,21 +322,24 @@ function renderScanResult(data) {
     html += `<h4>Ingredients</h4><p>${data.ingredients.join(", ")}</p>`;
   }
 
-  resultDiv.innerHTML = html;
+  detailsDiv.innerHTML = html;
   resultDiv.classList.remove("hidden");
-  actionsDiv.classList.remove("hidden");
 }
 
 // ─── Products Screen ────────────────────────────────────────────────────────
 
 function renderProducts() {
   const container = document.getElementById("products-list");
+  const noProducts = document.getElementById("no-products");
   if (!container) return;
 
   if (state.products.length === 0) {
-    container.innerHTML = `<p class="empty-state">No products yet. Scan a food label to get started!</p>`;
+    container.innerHTML = "";
+    if (noProducts) noProducts.classList.remove("hidden");
     return;
   }
+
+  if (noProducts) noProducts.classList.add("hidden");
 
   let html = "";
   state.products.forEach((product, index) => {
@@ -248,6 +362,7 @@ function renderProducts() {
   // Delete handlers
   container.querySelectorAll(".delete-product").forEach((btn) => {
     btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       const idx = parseInt(e.target.dataset.index);
       state.products.splice(idx, 1);
       saveProducts();
@@ -301,12 +416,55 @@ function showProductDetail(product) {
     html += `<h4>Ingredients</h4><p>${product.ingredients.join(", ")}</p>`;
   }
 
-  html += `<button class="btn" onclick="showScreen('meal')">Add to Meal</button>`;
-  html += `<button class="btn btn-secondary" onclick="showScreen('products')">Back</button>`;
+  html += `<button class="btn" id="btn-add-meal-from-detail">Add to Meal</button>`;
+  html += `<button class="btn btn-secondary" id="btn-back-from-detail">Back</button>`;
 
-  const overlay = document.getElementById("product-detail-overlay");
-  overlay.innerHTML = html;
-  overlay.classList.remove("hidden");
+  const modalName = document.getElementById("modal-product-name");
+  const modalDetails = document.getElementById("modal-product-details");
+  if (modalName) modalName.textContent = product.name;
+  if (modalDetails) modalDetails.innerHTML = html;
+
+  const modal = document.getElementById("product-modal");
+  if (modal) {
+    modal.classList.remove("hidden");
+
+    // Add to meal button
+    const addMealBtn = document.getElementById("btn-add-meal-from-detail");
+    if (addMealBtn) {
+      addMealBtn.addEventListener("click", () => {
+        modal.classList.add("hidden");
+        showScreen("meal");
+      });
+    }
+
+    // Back button
+    const backBtn = document.getElementById("btn-back-from-detail");
+    if (backBtn) {
+      backBtn.addEventListener("click", () => {
+        modal.classList.add("hidden");
+      });
+    }
+  }
+}
+
+// Close modal
+function initModal() {
+  const modal = document.getElementById("product-modal");
+  const closeBtn = document.getElementById("btn-close-modal");
+
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      modal.classList.add("hidden");
+    });
+  }
+
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        modal.classList.add("hidden");
+      }
+    });
+  }
 }
 
 // ─── Meal Builder Screen ────────────────────────────────────────────────────
@@ -314,72 +472,96 @@ function showProductDetail(product) {
 function renderMealBuilder() {
   const container = document.getElementById("meal-products-list");
   const mealNameInput = document.getElementById("meal-name-input");
-  const addProductBtn = document.getElementById("add-product-btn");
-  const createMealBtn = document.getElementById("create-meal-btn");
-  const addToLogBtn = document.getElementById("add-to-log-btn");
-  const mealSummary = document.getElementById("meal-summary");
+  const productSelect = document.getElementById("product-select");
+  const gramsInput = document.getElementById("grams-input");
+  const addProductBtn = document.getElementById("btn-add-product");
+  const saveMealBtn = document.getElementById("btn-save-meal");
+  const addToLogBtn = document.getElementById("btn-add-meal-to-log");
+  const nutritionSummary = document.getElementById("meal-nutrition-summary");
+  const nutritionDetails = document.getElementById("meal-nutrition-details");
 
-  if (state.products.length === 0) {
-    container.innerHTML = `<p class="empty-state">No products yet. Scan a food label first!</p>`;
-    return;
+  // Populate product selector
+  if (productSelect) {
+    productSelect.innerHTML = '<option value="">Select a product...</option>';
+    state.products.forEach((product) => {
+      const opt = document.createElement("option");
+      opt.value = product.id;
+      opt.textContent = `${product.name} (${product.unit || "g"})`;
+      productSelect.appendChild(opt);
+    });
   }
 
-  // Render product selector
-  let html = "";
-  state.products.forEach((product) => {
-    html += `<div class="product-selector">`;
-    html += `<label>${product.name} (${product.unit || "g"})</label>`;
-    html += `<input type="number" class="grams-input" data-product-id="${product.id}" min="0" step="1" placeholder="grams" value="0">`;
-    html += `</div>`;
-  });
-  container.innerHTML = html;
+  // Clear current meal products list
+  if (container) {
+    container.innerHTML = "";
+  }
 
-  // Add product to meal (toggle selection)
-  container.querySelectorAll(".product-selector").forEach((sel) => {
-    const input = sel.querySelector(".grams-input");
-    input.addEventListener("input", () => {
-      updateMealSummary();
-    });
-  });
+  state.selectedProducts = state.selectedProducts || [];
+  state.currentMeal = state.currentMeal || null;
 
+  // Render selected products
+  renderSelectedProducts();
+
+  // Add product to meal
   if (addProductBtn) {
     addProductBtn.addEventListener("click", () => {
-      // Already handled by input events above
-    });
-  }
+      const productId = productSelect.value;
+      const grams = parseFloat(gramsInput.value) || 0;
 
-  if (createMealBtn) {
-    createMealBtn.addEventListener("click", () => {
-      const mealName = mealNameInput.value.trim() || "Untitled Meal";
-      const products = [];
-
-      container.querySelectorAll(".grams-input").forEach((input) => {
-        const grams = parseFloat(input.value) || 0;
-        if (grams > 0) {
-          products.push({
-            productId: input.dataset.productId,
-            grams: grams,
-          });
-        }
-      });
-
-      if (products.length === 0) {
-        alert("Please add at least one product with grams.");
+      if (!productId) {
+        alert("Please select a product.");
         return;
       }
 
-      const meal = createMeal(mealName, products);
-      state.selectedProducts = products;
-      state.currentMeal = meal;
-      updateMealSummary();
-      renderMealSummary();
+      if (grams <= 0) {
+        alert("Please enter grams.");
+        return;
+      }
+
+      // Check if already added
+      const existing = state.selectedProducts.find((p) => p.productId === productId);
+      if (existing) {
+        existing.grams = grams;
+      } else {
+        state.selectedProducts.push({ productId, grams });
+      }
+
+      renderSelectedProducts();
+      updateMealNutrition();
+
+      // Reset inputs
+      productSelect.value = "";
+      if (gramsInput) gramsInput.value = "";
     });
   }
 
+  // Save meal
+  if (saveMealBtn) {
+    saveMealBtn.addEventListener("click", () => {
+      const mealName = mealNameInput.value.trim() || "Untitled Meal";
+
+      if (state.selectedProducts.length === 0) {
+        alert("Please add at least one product to the meal.");
+        return;
+      }
+
+      const meal = createMeal(mealName, state.selectedProducts);
+      state.currentMeal = meal;
+
+      // Calculate nutrition
+      const mealNutrition = calculateMealNutrition(meal);
+      state.currentMeal.nutrition = mealNutrition;
+
+      updateMealNutrition();
+      alert(`Meal "${meal.name}" saved!`);
+    });
+  }
+
+  // Add meal to log
   if (addToLogBtn) {
     addToLogBtn.addEventListener("click", () => {
       if (!state.currentMeal) {
-        alert("Please create a meal first.");
+        alert("Please save a meal first.");
         return;
       }
 
@@ -388,10 +570,6 @@ function renderMealBuilder() {
         state.dailyLog = { date: state.today, meals: [] };
       }
 
-      // Calculate meal nutrition
-      const mealNutrition = calculateMealNutrition(state.currentMeal);
-      state.currentMeal.nutrition = mealNutrition;
-
       state.dailyLog = addMealToLog(state.dailyLog, state.currentMeal);
       saveDailyLog();
 
@@ -399,6 +577,40 @@ function renderMealBuilder() {
       showScreen("log");
     });
   }
+}
+
+function renderSelectedProducts() {
+  const container = document.getElementById("meal-products-list");
+  if (!container) return;
+
+  if (state.selectedProducts.length === 0) {
+    container.innerHTML = `<p class="empty-state">No products added yet. Select a product above to add it.</p>`;
+    return;
+  }
+
+  let html = "";
+  state.selectedProducts.forEach((item, index) => {
+    const product = state.products.find((p) => p.id === item.productId);
+    if (product) {
+      html += `<div class="meal-item">`;
+      html += `<span>${product.name}: ${item.grams}${product.unit || "g"}</span>`;
+      html += `<button class="btn-small remove-meal-item" data-index="${index}">✕</button>`;
+      html += `</div>`;
+    }
+  });
+
+  container.innerHTML = html;
+
+  // Remove handlers
+  container.querySelectorAll(".remove-meal-item").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = parseInt(e.target.dataset.index);
+      state.selectedProducts.splice(idx, 1);
+      renderSelectedProducts();
+      updateMealNutrition();
+    });
+  });
 }
 
 function calculateMealNutrition(meal) {
@@ -419,36 +631,21 @@ function calculateMealNutrition(meal) {
   return nutrition;
 }
 
-function updateMealSummary() {
-  const container = document.getElementById("meal-products-list");
-  const summary = document.getElementById("meal-summary");
+function updateMealNutrition() {
+  const summaryDiv = document.getElementById("meal-nutrition-summary");
+  const detailsDiv = document.getElementById("meal-nutrition-details");
 
-  let html = "";
-  container.querySelectorAll(".grams-input").forEach((input) => {
-    const grams = parseFloat(input.value) || 0;
-    if (grams > 0) {
-      const productId = input.dataset.productId;
-      const product = state.products.find((p) => p.id === productId);
-      if (product) {
-        html += `<div class="meal-item">`;
-        html += `<span>${product.name}: ${grams}${product.unit || "g"}</span>`;
-        html += `</div>`;
-      }
-    }
-  });
+  if (!summaryDiv || !detailsDiv) return;
 
-  summary.innerHTML = html;
-}
+  if (state.selectedProducts.length === 0) {
+    summaryDiv.classList.add("hidden");
+    return;
+  }
 
-function renderMealSummary() {
-  if (!state.currentMeal) return;
+  const nutrition = calculateMealNutrition({ products: state.selectedProducts });
 
-  const nutrition = calculateMealNutrition(state.currentMeal);
-  const container = document.getElementById("meal-summary");
-
-  let html = `<h4>${state.currentMeal.name}</h4>`;
-  html += `<div class="nutrition-table">`;
-  html += `<table>`;
+  let html = `<h4>Meal Nutrition</h4>`;
+  html += `<table class="nutrition-table">`;
   html += `<tr><th>Nutrient</th><th>Amount</th></tr>`;
 
   const nutrientLabels = {
@@ -473,22 +670,29 @@ function renderMealSummary() {
     }
   }
 
-  html += `</table></div>`;
-  container.innerHTML = html;
+  html += `</table>`;
+  detailsDiv.innerHTML = html;
+  summaryDiv.classList.remove("hidden");
 }
 
 // ─── Daily Log Screen ───────────────────────────────────────────────────────
 
 function renderDailyLog() {
-  const container = document.getElementById("daily-log");
-  const totalsContainer = document.getElementById("daily-totals");
-  const filterSelect = document.getElementById("nutrient-filter");
-  const newDayBtn = document.getElementById("new-day-btn");
+  const mealsContainer = document.getElementById("meals-in-log");
+  const totalsContainer = document.getElementById("nutrient-totals");
+  const filterSelect = document.getElementById("nutrient-select");
+  const noMeals = document.getElementById("no-meals");
+  const dateDisplay = document.getElementById("date-display");
 
   // Initialize daily log if needed
   if (!state.dailyLog || state.dailyLog.date !== state.today) {
     state.dailyLog = { date: state.today, meals: [] };
     saveDailyLog();
+  }
+
+  // Display date
+  if (dateDisplay) {
+    dateDisplay.textContent = `Date: ${state.today}`;
   }
 
   // Render meals
@@ -510,28 +714,22 @@ function renderDailyLog() {
   } else {
     html = `<p class="empty-state">No meals logged today. Go to Meal Builder to add some!</p>`;
   }
-  container.innerHTML = html;
+  mealsContainer.innerHTML = html;
+
+  if (noMeals) {
+    if (state.dailyLog.meals && state.dailyLog.meals.length > 0) {
+      noMeals.classList.add("hidden");
+    } else {
+      noMeals.classList.remove("hidden");
+    }
+  }
 
   // Calculate and display totals
   renderTotals(filterSelect);
-
-  // Filter change
-  if (filterSelect) {
-    filterSelect.addEventListener("change", () => renderTotals(filterSelect));
-  }
-
-  // New day button
-  if (newDayBtn) {
-    newDayBtn.addEventListener("click", () => {
-      state.dailyLog = { date: state.today, meals: [] };
-      saveDailyLog();
-      renderDailyLog();
-    });
-  }
 }
 
 function renderTotals(filterSelect) {
-  const totalsContainer = document.getElementById("daily-totals");
+  const totalsContainer = document.getElementById("nutrient-totals");
   if (!state.dailyLog || !state.dailyLog.meals || state.dailyLog.meals.length === 0) {
     totalsContainer.innerHTML = "";
     return;
@@ -575,32 +773,23 @@ function renderTotals(filterSelect) {
     sodium: "Sodium (g)",
   };
 
-  // Build filter options
-  if (filterSelect) {
-    filterSelect.innerHTML = "";
-    const allOption = document.createElement("option");
-    allOption.value = "all";
-    allOption.textContent = "All Nutrients";
-    filterSelect.appendChild(allOption);
-
-    for (const key of Object.keys(allNutrients)) {
-      const opt = document.createElement("option");
-      opt.value = key;
-      opt.textContent = nutrientLabels[key] || key;
-      filterSelect.appendChild(opt);
-    }
-  }
-
-  const filter = filterSelect ? filterSelect.value : "all";
+  const filter = filterSelect ? filterSelect.value : "energy_kcal";
 
   let html = `<h3>Daily Totals</h3>`;
   html += `<table class="nutrition-table">`;
   html += `<tr><th>Nutrient</th><th>Total</th></tr>`;
 
-  for (const [key, value] of Object.entries(allNutrients)) {
-    if (filter !== "all" && filter !== key) continue;
-    const label = nutrientLabels[key] || key;
-    html += `<tr><td>${label}</td><td>${Math.round(value * 10) / 10}</td></tr>`;
+  if (filter === "all") {
+    for (const [key, value] of Object.entries(allNutrients)) {
+      const label = nutrientLabels[key] || key;
+      html += `<tr><td>${label}</td><td>${Math.round(value * 10) / 10}</td></tr>`;
+    }
+  } else {
+    const value = allNutrients[filter];
+    if (value !== undefined) {
+      const label = nutrientLabels[filter] || filter;
+      html += `<tr><td>${label}</td><td>${Math.round(value * 10) / 10}</td></tr>`;
+    }
   }
 
   html += `</table>`;
@@ -610,38 +799,34 @@ function renderTotals(filterSelect) {
 // ─── Settings Screen ────────────────────────────────────────────────────────
 
 function renderSettings() {
-  const baseUrlInput = document.getElementById("settings-base-url");
-  const apiKeyInput = document.getElementById("settings-api-key");
-  const modelInput = document.getElementById("settings-model");
-  const saveBtn = document.getElementById("save-settings-btn");
-  const clearBtn = document.getElementById("clear-data-btn");
+  const urlInput = document.getElementById("api-url");
+  const keyInput = document.getElementById("api-key");
+  const modelInput = document.getElementById("model-select");
+  const saveBtn = document.getElementById("btn-save-settings");
+  const resetBtn = document.getElementById("btn-reset-settings");
 
-  if (baseUrlInput) baseUrlInput.value = state.settings.baseUrl || "";
-  if (apiKeyInput) apiKeyInput.value = state.settings.apiKey || "";
-  if (modelInput) modelInput.value = state.settings.model || "gpt-4-vision-preview";
+  if (urlInput) urlInput.value = state.settings.baseUrl || "";
+  if (keyInput) keyInput.value = state.settings.apiKey || "";
+  if (modelInput) modelInput.value = state.settings.model || "gpt-4o";
 
   if (saveBtn) {
     saveBtn.addEventListener("click", () => {
-      state.settings.baseUrl = baseUrlInput.value.trim();
-      state.settings.apiKey = apiKeyInput.value.trim();
-      state.settings.model = modelInput.value.trim() || "gpt-4-vision-preview";
+      state.settings.baseUrl = urlInput.value.trim();
+      state.settings.apiKey = keyInput.value.trim();
+      state.settings.model = modelInput.value.trim() || "gpt-4o";
       saveSettings();
       alert("Settings saved!");
     });
   }
 
-  if (clearBtn) {
-    clearBtn.addEventListener("click", () => {
-      if (confirm("Are you sure you want to clear all data? This cannot be undone.")) {
-        state.products = [];
-        state.dailyLog = null;
-        state.selectedProducts = [];
-        state.currentMeal = null;
-        saveProducts();
-        saveDailyLog();
-        alert("All data cleared.");
-        showScreen("scan");
-      }
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      state.settings = {};
+      saveSettings();
+      urlInput.value = "";
+      keyInput.value = "";
+      modelInput.value = "gpt-4o";
+      alert("Settings reset to defaults.");
     });
   }
 }
@@ -649,11 +834,21 @@ function renderSettings() {
 // ─── Utility ────────────────────────────────────────────────────────────────
 
 function showLoading(show) {
-  const overlay = document.getElementById("loading-overlay");
-  if (overlay) {
-    if (show) {
-      overlay.classList.remove("hidden");
-    } else {
+  // Simple loading indicator using alert or a temporary overlay
+  if (show) {
+    // Create a temporary loading overlay
+    let overlay = document.getElementById("loading-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "loading-overlay";
+      overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;";
+      overlay.innerHTML = '<div style="background:white;padding:20px;border-radius:8px;text-align:center;"><p>Loading...</p></div>';
+      document.body.appendChild(overlay);
+    }
+    overlay.classList.remove("hidden");
+  } else {
+    const overlay = document.getElementById("loading-overlay");
+    if (overlay) {
       overlay.classList.add("hidden");
     }
   }
@@ -663,22 +858,14 @@ function showLoading(show) {
 
 document.addEventListener("DOMContentLoaded", () => {
   // Navigation
-  document.querySelectorAll(".nav-item").forEach((btn) => {
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      showScreen(btn.dataset.nav);
+      const screen = btn.dataset.screen;
+      if (screen) showScreen(screen);
     });
   });
 
-  // Close product detail overlay
-  const overlay = document.getElementById("product-detail-overlay");
-  if (overlay) {
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) {
-        overlay.classList.add("hidden");
-      }
-    });
-  }
-
+  initModal();
   initScanScreen();
   showScreen("scan");
 });
